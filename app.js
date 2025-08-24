@@ -642,7 +642,6 @@ function resetCalculator() {
     // ✅ Reset PDF button
     document.getElementById("downloadResultsPdf").disabled = true;
 }
-
 function downloadResults() {
     if (!window.lastResults) {
         alert("Please calculate results first.");
@@ -652,11 +651,11 @@ function downloadResults() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // Add site logo at the top (adjust URL to your logo file)
-    const img = new Image();
-    img.src = "https://thedietplanner.com/logo.png"; // change to your actual logo path
-    img.onload = function () {
-        doc.addImage(img, "PNG", 150, 10, 40, 20);
+    // Function to build PDF (called after logo load OR fallback)
+    function buildPDF(logoLoaded, img) {
+        if (logoLoaded && img) {
+            doc.addImage(img, "PNG", 150, 10, 40, 20);
+        }
 
         // Title styled like site
         doc.setFontSize(20);
@@ -733,10 +732,19 @@ function downloadResults() {
 
         // Save PDF
         doc.save("calorie-results.pdf");
+    }
+
+    // Try loading logo, but don’t block PDF if it fails
+    const img = new Image();
+    img.crossOrigin = "Anonymous"; // helps avoid CORS issues
+    img.src = "https://thedietplanner.com/logo.png"; // update with actual path
+    img.onload = function () {
+        buildPDF(true, img);
+    };
+    img.onerror = function () {
+        buildPDF(false, null);
     };
 }
-
-
 // Utility functions for better UX
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Enter' && currentStep > 0 && currentStep <= totalSteps) {
