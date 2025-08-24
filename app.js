@@ -643,7 +643,6 @@ function resetCalculator() {
     document.getElementById("downloadResultsPdf").disabled = true;
 }
 
-// Download results as PDF
 function downloadResults() {
     if (!window.lastResults) {
         alert("Please calculate results first.");
@@ -653,16 +652,32 @@ function downloadResults() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // Title
-    doc.setFontSize(18);
+    // Brand styling
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.setTextColor(40, 90, 140); // Accent color like your site
     doc.text("Smart Calorie Calculator Results", 20, 20);
 
-    doc.setFontSize(12);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, 35);
+    // Date
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0, 0, 0);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, 30);
 
-    // Inputs
-    doc.text("Your Inputs:", 20, 55);
-    let y = 70;
+    // Divider line
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, 35, 190, 35);
+
+    let y = 50;
+
+    // Inputs Section
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("Your Inputs", 20, y); 
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
     const inputs = [
       ["Age", window.lastResults.age],
       ["Gender", window.lastResults.gender],
@@ -673,13 +688,18 @@ function downloadResults() {
       ["Stress", window.lastResults.stress],
     ];
     inputs.forEach(([label, value]) => {
-      doc.text(`${label}: ${value ?? "—"}`, 20, y);
-      y += 10;
+      doc.text(`${label}: ${value ?? "—"}`, 30, y);
+      y += 7;
     });
 
-    // Results
+    // Results Section
     y += 10;
-    doc.text("Results:", 20, y); y += 15;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("Results", 20, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
     const outputs = [
       ["BMR", window.lastResults.bmr + " kcal/day"],
       ["TDEE", window.lastResults.tdee + " kcal/day"],
@@ -688,24 +708,43 @@ function downloadResults() {
       ["WHtR", window.lastResults.whtr],
     ];
     outputs.forEach(([label, value]) => {
-      doc.text(`${label}: ${value ?? "—"}`, 20, y);
-      y += 10;
+      doc.text(`${label}: ${value ?? "—"}`, 30, y);
+      y += 7;
     });
 
     // Macros
     y += 10;
-    doc.text("Macronutrient Breakdown:", 20, y); y += 15;
-    doc.text(`Protein: ${window.lastResults.macros.proteinGrams} g (${window.lastResults.macros.proteinPct}%)`, 20, y); y += 10;
-    doc.text(`Carbs: ${window.lastResults.macros.carbsGrams} g (${window.lastResults.macros.carbsPct}%)`, 20, y); y += 10;
-    doc.text(`Fat: ${window.lastResults.macros.fatGrams} g (${window.lastResults.macros.fatPct}%)`, 20, y); y += 10;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("Macronutrient Breakdown", 20, y);
+    y += 8;
 
-    // Footer
+    doc.setFont("helvetica", "normal");
+    doc.text(`Protein: ${window.lastResults.macros.proteinGrams} g (${window.lastResults.macros.proteinPct}%)`, 30, y); y += 7;
+    doc.text(`Carbs: ${window.lastResults.macros.carbsGrams} g (${window.lastResults.macros.carbsPct}%)`, 30, y); y += 7;
+    doc.text(`Fat: ${window.lastResults.macros.fatGrams} g (${window.lastResults.macros.fatPct}%)`, 30, y); y += 7;
+
+    // Links Section
+    y += 15;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13);
+    doc.setTextColor(40, 90, 140);
+    doc.textWithLink("👉 Try Our Diet Planner", 20, y, { url: "https://thedietplanner.com/personalized-diet-plans" });
+    y += 8;
+    doc.textWithLink("👉 Use Diet Tracker", 20, y, { url: "https://thedietplanner.com/diet-tracker
+" });
+
+    // Disclaimer
     y += 20;
+    doc.setFont("helvetica", "italic");
     doc.setFontSize(10);
+    doc.setTextColor(100, 100, 100);
     doc.text("Disclaimer: This report is for informational purposes only and not medical advice.", 20, y);
 
+    // Save PDF
     doc.save("calorie-results.pdf");
 }
+
 
 // Utility functions for better UX
 document.addEventListener('keydown', function(e) {
