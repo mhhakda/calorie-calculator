@@ -1,51 +1,125 @@
 /*
 QA CHECKLIST - Test these scenarios after changes:
-1. Male, 30y, 175cm, 70kg, moderate activity → BMR ~1700, TDEE ~2600-2700
-2. Female, 25y, 160cm, 55kg, light activity → BMR ~1350, TDEE ~1850-1900  
-3. Outlier inputs: age 14, weight 15kg → should show confirmation modal
-4. Progress bar: should show 1/11, 2/11... 11/11, fill from 0% to 100%
-5. Keyboard navigation: tab through buttons, arrow keys on unit toggles
-6. Export functions: Copy JSON works, PDF downloads with user data
+1. Male, 30y, 175cm, 70kg, moderate activity → BMR ~1600-1700, TDEE ~2600-2700
+2. Female, 25y, 160cm, 55kg, light activity → BMR ~1350-1400, TDEE ~1850-1900
+3. ft/in and lbs conversions produce same results as cm/kg equivalents
+4. Waist in inches and cm convert correctly for WHtR calculations
+5. Body fat % input switches calculations to use Katch-McArdle formula
+6. Copy JSON and Download PDF only enabled after successful calculation
 */
-
-// CONFIG / TUNABLES
-const BMR_FORMULA = 'mifflin-st-jeor'; // allowed: 'mifflin-st-jeor' | 'harris-benedict'
-const ACTIVITY_MULTIPLIERS = { sedentary: 1.2, light: 1.375, moderate: 1.55, active: 1.725, super: 1.9 };
-const BMI_THRESHOLDS = { underweight: 18.5, normal: 24.9, overweight: 29.9 };
-const MACRO_DEFAULTS = { proteinPct: 25, carbsPct: 50, fatPct: 25 };
 
 // Global variables
 let currentStep = 0;
 let userData = {};
 let calculatedResults = {};
+let resultsCalculated = false;
 
-// Safe DOM helpers
-function q(sel) { return document.querySelector(sel) || null; }
-function qa(sel) { return document.querySelectorAll(sel) || []; }
-function safeText(sel, fallback='') { const el=q(sel); return el ? (el.textContent || el.value || fallback) : fallback; }
-function safeValue(sel, fallback='') { const el=q(sel); return el && el.value !== undefined ? el.value : fallback; }
+// Activity multipliers
+const ACTIVITY_MULTIPLIERS = {
+    sedentary: 1.2,
+    light: 1.375,
+    moderate: 1.55,
+    active: 1.725,
+    super: 1.9
+};
+
+// BMI thresholds
+const BMI_THRESHOLDS = {
+    underweight: 18.5,
+    normal: 24.9,
+    overweight: 29.9
+};
+
+// Debug mode
+const DEBUG_MODE = new URLSearchParams(window.location.search).get('debug') === 'true';
+
+// DOM helper functions
+function q(selector) { 
+    return document.querySelector(selector) || null; 
+}
+
+function setText(selector, value) {
+    const el = q(selector);
+    if (el) el.textContent = value;
+}
+
+function parseNumber(selector) {
+    const el = q(selector);
+    if (!el || !el.value) return null;
+    const num = parseFloat(el.value);
+    return isNaN(num) ? null : num;
+}
 
 // Toast notification system
-function showToast(msg, type='info') {
+function showToast(msg, ms = 4000) {
     try {
         const container = q('#toastContainer');
         if (!container) return;
         
         const toast = document.createElement('div');
-        toast.className = `toast toast--${type}`;
+        toast.className = 'toast toast--info';
         toast.textContent = msg;
         
         container.appendChild(toast);
         
-        // Auto-remove after 4 seconds
         setTimeout(() => {
             if (toast.parentNode) {
                 toast.classList.add('toast--fade');
                 setTimeout(() => toast.remove(), 300);
             }
-        }, 4000);
+        }, ms);
     } catch (error) {
         console.error('Toast error:', error);
+    }
+}
+
+// Debug logging
+function debugLog(message, data = null) {
+    if (DEBUG_MODE) {
+        console.log(`[DEBUG] ${message}`, data);
+        const debugOutput = q('#debugOutput');
+        if (debugOutput) {
+            debugOutput.textContent += `${message}: ${JSON.stringify(data, null, 2)}\n`;
+        }
+    }
+}
+
+// Unit conversion helpers
+function getHeightCm() {
+    const activeUnit = q('#step-3 .unit-btn.active');
+    if (!activeUnit) return null;
+    
+    if (activeUnit.dataset.unit === 'cm') {
+        return parseNumber('#height-cm');
+    } else {
+        const ft = parseNumber('#height-ft') || 0;
+        const inches = parseNumber('#height-in') || 0;
+        if (ft === 0 && inches === 0) return null;
+        return Math.round((ft * 12 + inches) * 2.54 * 100) / 100;
+    }
+}
+
+function getWeightKg() {
+    const activeUnit = q('#step-4 .unit-btn.active');
+    if (!activeUnit) return null;
+    
+    if (activeUnit.dataset.unit === 'kg') {
+        return parseNumber('#weight-kg');
+    } else {
+        const lbs = parseNumber('#weight-lbs');
+        return lbs ? Math.round(lbs * 0.453592 * 100) / 100 : null;
+    }
+}
+
+function getWaistCm() {
+    const activeUnit = q('#step-8 .unit-btn.active');
+    if (!activeUnit) return null;
+    
+    if (activeUnit.dataset.unit === 'cm') {
+        return parseNumber('#waist-cm');
+    } else {
+        const inches = parseNumber('#waist-in');
+        return inches ? Math.round(inches * 2.54 * 100) / 100 : null;
     }
 }
 
@@ -55,10 +129,15 @@ document.addEventListener('DOMContentLoaded', function() {
         updateProgress();
         setupUnitToggles();
         setupKeyboardNavigation();
-        window.totalSteps = qa('.form-step').length - 1; // Exclude welcome screen
+        window.totalSteps = document.querySelectorAll('.form-step').length - 2; // Exclude welcome and results
+        
+        if (DEBUG_MODE) {
+            const debugPanel = q('#debugPanel');
+            if (debugPanel) debugPanel.classList.remove('hidden');
+        }
     } catch (error) {
         console.error('Initialization error:', error);
-        showToast('App initialization failed', 'error');
+        showToast('App initialization failed');
     }
 });
 
@@ -66,17 +145,14 @@ document.addEventListener('DOMContentLoaded', function() {
 function updateProgress() {
     try {
         const totalSteps = Number(window.totalSteps || 11);
-        const displayStep = Math.min(totalSteps, currentStep + 1);
-        const progressPct = totalSteps > 1 ? Math.round((currentStep / (totalSteps - 1)) * 100) : 100;
+        const displayStep = Math.min(totalSteps, Math.max(1, currentStep));
+        const progressPct = totalSteps > 1 ? Math.round(((currentStep - 1) / (totalSteps - 1)) * 100) : 0;
         
         const fill = q('#progressFill');
-        if (fill) fill.style.width = progressPct + '%';
+        if (fill) fill.style.width = Math.max(0, progressPct) + '%';
         
-        const stepLabel = q('#currentStep');
-        if (stepLabel) stepLabel.textContent = displayStep;
-        
-        const totalLabel = q('#totalSteps');
-        if (totalLabel) totalLabel.textContent = totalSteps;
+        setText('#currentStep', displayStep);
+        setText('#totalSteps', totalSteps);
     } catch (error) {
         console.error('Progress update error:', error);
     }
@@ -96,7 +172,7 @@ function nextStep() {
         }
     } catch (error) {
         console.error('Next step error:', error);
-        showToast('Navigation error occurred', 'error');
+        showToast('Navigation error occurred');
     }
 }
 
@@ -110,7 +186,7 @@ function prevStep() {
         }
     } catch (error) {
         console.error('Previous step error:', error);
-        showToast('Navigation error occurred', 'error');
+        showToast('Navigation error occurred');
     }
 }
 
@@ -122,50 +198,17 @@ function hideStep(stepNumber) {
 function showStep(stepNumber) {
     const step = q(`#step-${stepNumber}`);
     if (step) step.classList.add('active');
-}
-
-// Modal functionality
-let pendingStepAdvance = false;
-
-function showConfirmModal(title, message) {
-    const modal = q('#modal');
-    const titleEl = q('#modal-title');
-    const messageEl = q('#modal-message');
     
-    if (modal && titleEl && messageEl) {
-        titleEl.textContent = title;
-        messageEl.textContent = message;
-        modal.classList.remove('hidden');
-        modal.setAttribute('aria-hidden', 'false');
+    // Show results step
+    if (stepNumber === 'results') {
+        const resultsStep = q('#results');
+        if (resultsStep) resultsStep.classList.add('active');
     }
 }
 
-function closeModal() {
-    const modal = q('#modal');
-    if (modal) {
-        modal.classList.add('hidden');
-        modal.setAttribute('aria-hidden', 'true');
-    }
-    pendingStepAdvance = false;
-}
-
-function confirmModal() {
-    closeModal();
-    if (pendingStepAdvance) {
-        pendingStepAdvance = false;
-        // Force advance to next step
-        hideStep(currentStep);
-        currentStep++;
-        showStep(currentStep);
-        updateProgress();
-    }
-}
-
-// Form validation with outlier handling
+// Form validation
 function validateCurrentStep() {
     try {
-        clearErrorMessages();
-        
         switch(currentStep) {
             case 1: return validateAge();
             case 2: return validateGender();
@@ -182,28 +225,17 @@ function validateCurrentStep() {
         }
     } catch (error) {
         console.error('Validation error:', error);
-        showToast('Validation error occurred', 'error');
+        showToast('Validation error occurred');
         return false;
     }
 }
 
 function validateAge() {
-    const ageEl = q('#age');
-    if (!ageEl) return false;
-    
-    const age = Number(ageEl.value);
-    if (!age || age < 1) {
-        showToast('Please enter a valid age', 'error');
+    const age = parseNumber('#age');
+    if (!age || age < 1 || age > 120) {
+        showToast('Please enter a valid age (1-120 years)');
         return false;
     }
-    
-    // Outlier handling with confirmation
-    if (age < 15 || age > 100) {
-        showConfirmModal('Unusual Age', `You've entered age ${age}. This is outside typical ranges. Proceed anyway?`);
-        pendingStepAdvance = true;
-        return false;
-    }
-    
     userData.age = age;
     return true;
 }
@@ -211,7 +243,7 @@ function validateAge() {
 function validateGender() {
     const genderEl = q('input[name="gender"]:checked');
     if (!genderEl) {
-        showToast('Please select your gender', 'error');
+        showToast('Please select your gender');
         return false;
     }
     userData.gender = genderEl.value;
@@ -219,106 +251,29 @@ function validateGender() {
 }
 
 function validateHeight() {
-    const activeUnit = q('.unit-btn[data-unit].active');
-    if (!activeUnit) return false;
-    
-    const unit = activeUnit.dataset.unit;
-    
-    if (unit === 'cm') {
-        const heightEl = q('#height-cm');
-        if (!heightEl) return false;
-        
-        const height = Number(heightEl.value);
-        if (!height || height < 50) {
-            showToast('Please enter a valid height', 'error');
-            return false;
-        }
-        
-        if (height < 100 || height > 250) {
-            showConfirmModal('Unusual Height', `You've entered ${height}cm. This is outside typical ranges. Proceed anyway?`);
-            pendingStepAdvance = true;
-            return false;
-        }
-        
-        userData.height = height;
-        userData.heightUnit = 'cm';
-    } else {
-        const ftEl = q('#height-ft');
-        const inEl = q('#height-in');
-        if (!ftEl || !inEl) return false;
-        
-        const ft = Number(ftEl.value) || 0;
-        const inches = Number(inEl.value) || 0;
-        
-        if (ft < 3 || ft > 8 || inches < 0 || inches > 11) {
-            showToast('Please enter valid height values', 'error');
-            return false;
-        }
-        
-        const totalCm = (ft * 12 + inches) * 2.54;
-        userData.height = totalCm;
-        userData.heightUnit = 'ft';
-        userData.heightFt = ft;
-        userData.heightIn = inches;
+    const heightCm = getHeightCm();
+    if (!heightCm || heightCm < 100 || heightCm > 250) {
+        showToast('Please enter a valid height');
+        return false;
     }
-    
+    userData.heightCm = heightCm;
     return true;
 }
 
 function validateWeight() {
-    const activeUnit = q('.unit-btn[data-unit].active');
-    if (!activeUnit) return false;
-    
-    const unit = activeUnit.dataset.unit;
-    let weight;
-    
-    if (unit === 'kg') {
-        const weightEl = q('#weight-kg');
-        if (!weightEl) return false;
-        
-        weight = Number(weightEl.value);
-        if (!weight || weight < 10) {
-            showToast('Please enter a valid weight', 'error');
-            return false;
-        }
-        
-        if (weight < 20 || weight > 300) {
-            showConfirmModal('Unusual Weight', `You've entered ${weight}kg. This is outside typical ranges. Proceed anyway?`);
-            pendingStepAdvance = true;
-            return false;
-        }
-        
-        userData.weight = weight;
-        userData.weightUnit = 'kg';
-    } else {
-        const weightEl = q('#weight-lbs');
-        if (!weightEl) return false;
-        
-        const lbs = Number(weightEl.value);
-        if (!lbs || lbs < 20) {
-            showToast('Please enter a valid weight', 'error');
-            return false;
-        }
-        
-        if (lbs < 44 || lbs > 660) {
-            showConfirmModal('Unusual Weight', `You've entered ${lbs}lbs. This is outside typical ranges. Proceed anyway?`);
-            pendingStepAdvance = true;
-            return false;
-        }
-        
-        weight = lbs * 0.453592;
-        userData.weight = weight;
-        userData.weightUnit = 'lbs';
-        userData.weightLbs = lbs;
+    const weightKg = getWeightKg();
+    if (!weightKg || weightKg < 20 || weightKg > 300) {
+        showToast('Please enter a valid weight');
+        return false;
     }
-    
+    userData.weightKg = weightKg;
     return true;
 }
 
 function validateGoal() {
     const goalEl = q('input[name="goal"]:checked');
     if (!goalEl) {
-        showToast('Please select your goal', 'error');
+        showToast('Please select your goal');
         return false;
     }
     userData.goal = goalEl.value;
@@ -328,7 +283,7 @@ function validateGoal() {
 function validateActivity() {
     const activityEl = q('input[name="activity"]:checked');
     if (!activityEl) {
-        showToast('Please select your activity level', 'error');
+        showToast('Please select your activity level');
         return false;
     }
     userData.activity = activityEl.value;
@@ -336,11 +291,10 @@ function validateActivity() {
 }
 
 function validateBodyFat() {
-    const bodyFatEl = q('#bodyFat');
-    if (bodyFatEl && bodyFatEl.value) {
-        const bodyFat = Number(bodyFatEl.value);
+    const bodyFat = parseNumber('#bodyFat');
+    if (bodyFat !== null) {
         if (bodyFat < 5 || bodyFat > 50) {
-            showToast('Body fat percentage should be between 5% and 50%', 'error');
+            showToast('Body fat percentage should be between 5% and 50%');
             return false;
         }
         userData.bodyFat = bodyFat;
@@ -349,22 +303,19 @@ function validateBodyFat() {
 }
 
 function validateWaist() {
-    const waistEl = q('#waist');
-    if (!waistEl) return false;
-    
-    const waist = Number(waistEl.value);
-    if (!waist || waist < 20) {
-        showToast('Please enter a valid waist measurement', 'error');
+    const waistCm = getWaistCm();
+    if (!waistCm || waistCm < 40 || waistCm > 200) {
+        showToast('Please enter a valid waist measurement');
         return false;
     }
-    userData.waist = waist;
+    userData.waistCm = waistCm;
     return true;
 }
 
 function validateWork() {
     const workEl = q('input[name="work"]:checked');
     if (!workEl) {
-        showToast('Please select your work type', 'error');
+        showToast('Please select your work type');
         return false;
     }
     userData.work = workEl.value;
@@ -372,12 +323,9 @@ function validateWork() {
 }
 
 function validateSleep() {
-    const sleepEl = q('#sleep');
-    if (!sleepEl) return false;
-    
-    const sleep = Number(sleepEl.value);
+    const sleep = parseNumber('#sleep');
     if (!sleep || sleep < 3 || sleep > 15) {
-        showToast('Please enter sleep hours between 3 and 15', 'error');
+        showToast('Please enter sleep hours between 3 and 15');
         return false;
     }
     userData.sleep = sleep;
@@ -387,58 +335,45 @@ function validateSleep() {
 function validateStress() {
     const stressEl = q('input[name="stress"]:checked');
     if (!stressEl) {
-        showToast('Please select your stress level', 'error');
+        showToast('Please select your stress level');
         return false;
     }
     userData.stress = stressEl.value;
     return true;
 }
 
-function clearErrorMessages() {
-    // Clear any existing error messages
-    const errors = qa('.error-message');
-    errors.forEach(error => error.remove());
-}
-
 // Unit toggle functionality
 function setupUnitToggles() {
     try {
-        // Height unit toggle
-        const heightButtons = qa('#step-3 .unit-btn');
-        heightButtons.forEach(btn => {
-            btn.addEventListener('keydown', handleUnitKeydown);
-        });
+        // Setup waist unit conversion
+        const waistCmInput = q('#waist-cm');
+        const waistInInput = q('#waist-in');
         
-        // Weight unit toggle  
-        const weightButtons = qa('#step-4 .unit-btn');
-        weightButtons.forEach(btn => {
-            btn.addEventListener('keydown', handleUnitKeydown);
-        });
+        if (waistCmInput) {
+            waistCmInput.addEventListener('input', () => {
+                const cm = parseFloat(waistCmInput.value);
+                if (!isNaN(cm) && waistInInput) {
+                    waistInInput.value = Math.round((cm / 2.54) * 10) / 10;
+                }
+            });
+        }
+        
+        if (waistInInput) {
+            waistInInput.addEventListener('input', () => {
+                const inches = parseFloat(waistInInput.value);
+                if (!isNaN(inches) && waistCmInput) {
+                    waistCmInput.value = Math.round((inches * 2.54) * 10) / 10;
+                }
+            });
+        }
     } catch (error) {
         console.error('Unit toggle setup error:', error);
     }
 }
 
-function handleUnitKeydown(event) {
-    if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        event.target.click();
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-        event.preventDefault();
-        const container = event.target.parentElement;
-        const buttons = [...container.querySelectorAll('.unit-btn')];
-        const currentIndex = buttons.indexOf(event.target);
-        const nextIndex = event.key === 'ArrowRight' 
-            ? (currentIndex + 1) % buttons.length 
-            : (currentIndex - 1 + buttons.length) % buttons.length;
-        buttons[nextIndex].focus();
-        buttons[nextIndex].click();
-    }
-}
-
 function toggleHeightUnit(clickedBtn) {
     try {
-        const buttons = qa('#step-3 .unit-btn');
+        const buttons = document.querySelectorAll('#step-3 .unit-btn');
         buttons.forEach(btn => {
             btn.classList.remove('active');
             btn.setAttribute('aria-checked', 'false');
@@ -465,7 +400,7 @@ function toggleHeightUnit(clickedBtn) {
 
 function toggleWeightUnit(clickedBtn) {
     try {
-        const buttons = qa('#step-4 .unit-btn');
+        const buttons = document.querySelectorAll('#step-4 .unit-btn');
         buttons.forEach(btn => {
             btn.classList.remove('active');
             btn.setAttribute('aria-checked', 'false');
@@ -485,21 +420,42 @@ function toggleWeightUnit(clickedBtn) {
             if (kgGroup) kgGroup.classList.add('hidden');
             if (lbsGroup) lbsGroup.classList.remove('hidden');
         }
-        
-        // Update waist unit label
-        const waistUnit = q('#waist-unit');
-        if (waistUnit) {
-            waistUnit.textContent = unit === 'kg' ? 'cm' : 'in';
-        }
     } catch (error) {
         console.error('Weight toggle error:', error);
+    }
+}
+
+function toggleWaistUnit(clickedBtn) {
+    try {
+        const buttons = document.querySelectorAll('#step-8 .unit-btn');
+        buttons.forEach(btn => {
+            btn.classList.remove('active');
+            btn.setAttribute('aria-checked', 'false');
+        });
+        
+        clickedBtn.classList.add('active');
+        clickedBtn.setAttribute('aria-checked', 'true');
+        
+        const unit = clickedBtn.dataset.unit;
+        const cmGroup = q('#waist-cm-group');
+        const inGroup = q('#waist-in-group');
+        
+        if (unit === 'cm') {
+            if (cmGroup) cmGroup.classList.remove('hidden');
+            if (inGroup) inGroup.classList.add('hidden');
+        } else {
+            if (cmGroup) cmGroup.classList.add('hidden');
+            if (inGroup) inGroup.classList.remove('hidden');
+        }
+    } catch (error) {
+        console.error('Waist toggle error:', error);
     }
 }
 
 function setupKeyboardNavigation() {
     try {
         // Add keyboard support for radio groups
-        const radioGroups = qa('[role="radiogroup"]');
+        const radioGroups = document.querySelectorAll('[role="radiogroup"]');
         radioGroups.forEach(group => {
             const radios = group.querySelectorAll('input[type="radio"]');
             radios.forEach((radio, index) => {
@@ -528,50 +484,98 @@ function skipBodyFat() {
     nextStep();
 }
 
-// Calculation functions
+// Main calculation function - FIXED
 function calculateResults() {
     try {
-        const bmr = calculateBMR();
-        const tdee = bmr * (ACTIVITY_MULTIPLIERS[userData.activity] || 1.2);
-        const goalCalories = calculateGoalCalories(tdee);
-        const bmi = calculateBMI();
-        const waistToHeight = calculateWaistToHeight();
-        const macros = calculateMacros(goalCalories);
+        debugLog('Starting calculation with userData', userData);
         
+        // Validate all required data
+        if (!userData.age || !userData.gender || !userData.heightCm || !userData.weightKg || 
+            !userData.goal || !userData.activity || !userData.waistCm || !userData.work || 
+            !userData.sleep || !userData.stress) {
+            showToast('Please complete all required fields');
+            return false;
+        }
+        
+        // Calculate BMR
+        const bmr = calculateBMR();
+        debugLog('BMR calculated', bmr);
+        
+        if (!bmr || bmr < 800 || bmr > 4000) {
+            throw new Error('Invalid BMR calculation result');
+        }
+        
+        // Calculate TDEE
+        const multiplier = ACTIVITY_MULTIPLIERS[userData.activity] || 1.2;
+        const tdee = bmr * multiplier;
+        debugLog('TDEE calculated', { bmr, multiplier, tdee });
+        
+        // Calculate goal calories with safety floor
+        let goalCalories = calculateGoalCalories(tdee);
+        if (goalCalories < 1000) {
+            showToast('Warning: Very low calorie target. Please consult a healthcare professional.');
+            goalCalories = Math.max(goalCalories, 1000);
+        }
+        
+        // Calculate BMI
+        const bmi = calculateBMI();
+        debugLog('BMI calculated', bmi);
+        
+        // Calculate waist-to-height ratio
+        const waistToHeight = calculateWaistToHeight();
+        debugLog('Waist-to-height ratio', waistToHeight);
+        
+        // Calculate macros
+        const macros = calculateMacros(goalCalories);
+        debugLog('Macros calculated', macros);
+        
+        // Store results
         calculatedResults = {
             bmr: Math.round(bmr),
             tdee: Math.round(tdee),
             goalCalories: Math.round(goalCalories),
             bmi: Math.round(bmi * 100) / 100,
-            waistToHeight: Math.round(waistToHeight * 100) / 100,
+            waistToHeight: Math.round(waistToHeight * 1000) / 1000,
             macros,
             userData: { ...userData }
         };
         
+        debugLog('Final results', calculatedResults);
+        resultsCalculated = true;
+        
+        // Enable export buttons
+        const copyBtn = q('#copyResultsBtn');
+        const pdfBtn = q('#downloadPdfBtn');
+        if (copyBtn) copyBtn.disabled = false;
+        if (pdfBtn) pdfBtn.disabled = false;
+        
+        // Display results
         displayResults();
         
+        // Navigate to results
         hideStep(currentStep);
         showStep('results');
-        currentStep = 12; // Set to results step
-        updateProgress();
+        
+        showToast('Calculation completed successfully!');
         
     } catch (error) {
         console.error('Calculation error:', error);
-        showToast('Calculation failed. Please check your inputs.', 'error');
+        showToast('Calculation failed - check console');
+        return false;
     }
 }
 
 function calculateBMR() {
-    const { age, gender, weight, height, bodyFat } = userData;
+    const { age, gender, weightKg, heightCm, bodyFat } = userData;
     
     // Use Katch-McArdle if body fat is available
-    if (bodyFat) {
-        const leanMass = weight * (1 - bodyFat / 100);
+    if (bodyFat && bodyFat > 0) {
+        const leanMass = weightKg * (1 - bodyFat / 100);
         return 370 + (21.6 * leanMass);
     }
     
     // Use Mifflin-St Jeor formula
-    let bmr = (10 * weight) + (6.25 * height) - (5 * age);
+    let bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age);
     
     if (gender === 'male') {
         bmr += 5;
@@ -593,41 +597,49 @@ function calculateGoalCalories(tdee) {
         case 'maintain':
             return tdee;
         case 'gain':
-            return tdee + 500; // 1 lb per week gain
+            return tdee + 300; // Conservative gain
         default:
             return tdee;
     }
 }
 
 function calculateBMI() {
-    const { weight, height } = userData;
-    const heightInMeters = height / 100;
-    return heightInMeters > 0 ? weight / (heightInMeters * heightInMeters) : 0;
+    const { weightKg, heightCm } = userData;
+    const heightInMeters = heightCm / 100;
+    return heightInMeters > 0 ? weightKg / (heightInMeters * heightInMeters) : 0;
 }
 
 function calculateWaistToHeight() {
-    const { waist, height } = userData;
-    return height > 0 ? waist / height : 0;
+    const { waistCm, heightCm } = userData;
+    return heightCm > 0 ? waistCm / heightCm : 0;
 }
 
 function calculateMacros(goalCalories) {
-    const { weight, goal, activity } = userData;
+    if (goalCalories <= 0) {
+        return {
+            protein: { grams: 0, calories: 0, percentage: 0 },
+            carbs: { grams: 0, calories: 0, percentage: 0 },
+            fats: { grams: 0, calories: 0, percentage: 0 }
+        };
+    }
+    
+    const { weightKg, goal, activity } = userData;
     
     // Protein calculation (1.2-2.0g per kg based on activity and goal)
     let proteinPerKg = 1.2;
     if (goal === 'gain') proteinPerKg = 1.8;
     else if (activity === 'active' || activity === 'super') proteinPerKg = 1.6;
     
-    const proteinGrams = Math.round(weight * proteinPerKg);
+    const proteinGrams = Math.round(weightKg * proteinPerKg);
     const proteinCalories = proteinGrams * 4;
     
-    // Fat calculation (25-30% of calories)
+    // Fat calculation (25% of calories)
     const fatCalories = Math.round(goalCalories * 0.25);
     const fatGrams = Math.round(fatCalories / 9);
     
     // Carbs get the rest
-    const carbsCalories = goalCalories - proteinCalories - fatCalories;
-    const carbsGrams = Math.round(Math.max(0, carbsCalories) / 4);
+    const carbsCalories = Math.max(0, goalCalories - proteinCalories - fatCalories);
+    const carbsGrams = Math.round(carbsCalories / 4);
     
     // Calculate percentages safely
     const totalCalories = proteinCalories + fatCalories + carbsCalories;
@@ -647,47 +659,31 @@ function displayResults() {
         const { bmr, tdee, goalCalories, bmi, waistToHeight, macros } = calculatedResults;
         
         // Display main metrics
-        const maintenanceEl = q('#maintenanceCalories');
-        if (maintenanceEl) maintenanceEl.textContent = tdee.toLocaleString();
-        
-        const goalEl = q('#goalCalories');
-        if (goalEl) goalEl.textContent = goalCalories.toLocaleString();
-        
-        const bmiEl = q('#bmi');
-        if (bmiEl) bmiEl.textContent = bmi.toFixed(1);
-        
-        const waistEl = q('#waistToHeight');
-        if (waistEl) waistEl.textContent = waistToHeight.toFixed(2);
+        setText('#maintenanceCalories', tdee.toLocaleString());
+        setText('#goalCalories', goalCalories.toLocaleString());
+        setText('#bmi', bmi.toFixed(1));
+        setText('#waistToHeight', waistToHeight.toFixed(3));
         
         // BMI Category
-        const bmiCategoryEl = q('#bmiCategory');
-        if (bmiCategoryEl) {
-            let category = 'Normal';
-            if (bmi < BMI_THRESHOLDS.underweight) category = 'Underweight';
-            else if (bmi > BMI_THRESHOLDS.overweight) category = 'Obese';
-            else if (bmi > BMI_THRESHOLDS.normal) category = 'Overweight';
-            bmiCategoryEl.textContent = category;
-        }
+        let bmiCategory = 'Normal';
+        if (bmi < BMI_THRESHOLDS.underweight) bmiCategory = 'Underweight';
+        else if (bmi > BMI_THRESHOLDS.overweight) bmiCategory = 'Obese';
+        else if (bmi > BMI_THRESHOLDS.normal) bmiCategory = 'Overweight';
+        setText('#bmiCategory', bmiCategory);
         
         // Waist Category
-        const waistCategoryEl = q('#waistCategory');
-        if (waistCategoryEl) {
-            let category = 'Low Risk';
-            if (waistToHeight >= 0.6) category = 'High Risk';
-            else if (waistToHeight >= 0.5) category = 'Increased Risk';
-            waistCategoryEl.textContent = category;
-        }
+        let waistCategory = 'Low Risk';
+        if (waistToHeight >= 0.6) waistCategory = 'High Risk';
+        else if (waistToHeight >= 0.5) waistCategory = 'Increased Risk';
+        setText('#waistCategory', waistCategory);
         
         // Goal Label
-        const goalLabelEl = q('#goalLabel');
-        if (goalLabelEl) {
-            const labels = {
-                lose: 'For weight loss',
-                maintain: 'To maintain weight', 
-                gain: 'For muscle gain'
-            };
-            goalLabelEl.textContent = labels[userData.goal] || 'For your goal';
-        }
+        const goalLabels = {
+            lose: 'For weight loss',
+            maintain: 'To maintain weight',
+            gain: 'For muscle gain'
+        };
+        setText('#goalLabel', goalLabels[userData.goal] || 'For your goal');
         
         // Macronutrients
         displayMacros(macros);
@@ -697,29 +693,26 @@ function displayResults() {
         
     } catch (error) {
         console.error('Display results error:', error);
-        showToast('Error displaying results', 'error');
+        showToast('Error displaying results');
     }
 }
 
 function displayMacros(macros) {
     try {
         // Protein
-        const proteinAmountEl = q('#proteinAmount');
-        const proteinBarEl = q('#proteinBar');
-        if (proteinAmountEl) proteinAmountEl.textContent = `${macros.protein.grams}g (${macros.protein.percentage}%)`;
-        if (proteinBarEl) proteinBarEl.style.width = `${macros.protein.percentage}%`;
+        setText('#proteinAmount', `${macros.protein.grams}g (${macros.protein.percentage}%)`);
+        const proteinBar = q('#proteinBar');
+        if (proteinBar) proteinBar.style.width = `${macros.protein.percentage}%`;
         
         // Carbs
-        const carbsAmountEl = q('#carbsAmount');
-        const carbsBarEl = q('#carbsBar');
-        if (carbsAmountEl) carbsAmountEl.textContent = `${macros.carbs.grams}g (${macros.carbs.percentage}%)`;
-        if (carbsBarEl) carbsBarEl.style.width = `${macros.carbs.percentage}%`;
+        setText('#carbsAmount', `${macros.carbs.grams}g (${macros.carbs.percentage}%)`);
+        const carbsBar = q('#carbsBar');
+        if (carbsBar) carbsBar.style.width = `${macros.carbs.percentage}%`;
         
         // Fats
-        const fatsAmountEl = q('#fatsAmount');
-        const fatsBarEl = q('#fatsBar');
-        if (fatsAmountEl) fatsAmountEl.textContent = `${macros.fats.grams}g (${macros.fats.percentage}%)`;
-        if (fatsBarEl) fatsBarEl.style.width = `${macros.fats.percentage}%`;
+        setText('#fatsAmount', `${macros.fats.grams}g (${macros.fats.percentage}%)`);
+        const fatsBar = q('#fatsBar');
+        if (fatsBar) fatsBar.style.width = `${macros.fats.percentage}%`;
     } catch (error) {
         console.error('Macro display error:', error);
     }
@@ -730,36 +723,27 @@ function displayRecommendations() {
         const { goal, sleep, stress, work, bodyFat } = userData;
         
         // Weekly goal
-        const weeklyGoalEl = q('#weeklyGoal');
-        if (weeklyGoalEl) {
-            const goals = {
-                lose: 'Safe weekly weight loss: 0.5-1.0 kg (1-2 lbs)',
-                maintain: 'Focus on maintaining current weight with balanced nutrition',
-                gain: 'Safe weekly weight gain: 0.25-0.5 kg (0.5-1 lbs)'
-            };
-            weeklyGoalEl.innerHTML = `<strong>Weekly Target:</strong> ${goals[goal]}`;
-        }
+        const goals = {
+            lose: 'Safe weekly weight loss: 0.5-1.0 kg (1-2 lbs)',
+            maintain: 'Focus on maintaining current weight with balanced nutrition',
+            gain: 'Safe weekly weight gain: 0.25-0.5 kg (0.5-1 lbs)'
+        };
+        setText('#weeklyGoal', `Weekly Target: ${goals[goal]}`);
         
         // Lifestyle tip
-        const lifestyleTipEl = q('#lifestyleTip');
-        if (lifestyleTipEl) {
-            let tip = 'Stay consistent with your nutrition and exercise routine.';
-            
-            if (sleep < 7) {
-                tip = 'Consider getting more sleep (7-9 hours) to support your metabolism and recovery.';
-            } else if (stress === 'high') {
-                tip = 'High stress can affect your metabolism. Consider stress management techniques.';
-            } else if (work === 'desk') {
-                tip = 'With a desk job, try to add more movement throughout your day.';
-            }
-            
-            lifestyleTipEl.innerHTML = `<strong>Lifestyle Tip:</strong> ${tip}`;
+        let tip = 'Stay consistent with your nutrition and exercise routine.';
+        if (sleep < 7) {
+            tip = 'Consider getting more sleep (7-9 hours) to support your metabolism and recovery.';
+        } else if (stress === 'high') {
+            tip = 'High stress can affect your metabolism. Consider stress management techniques.';
+        } else if (work === 'desk') {
+            tip = 'With a desk job, try to add more movement throughout your day.';
         }
+        setText('#lifestyleTip', `Lifestyle Tip: ${tip}`);
         
         // Body fat display
-        const bodyFatDisplayEl = q('#bodyFatDisplay');
-        if (bodyFatDisplayEl && bodyFat) {
-            bodyFatDisplayEl.innerHTML = `<strong>Body Fat:</strong> ${bodyFat}% (used for more accurate BMR calculation)`;
+        if (bodyFat) {
+            setText('#bodyFatDisplay', `Body Fat: ${bodyFat}% (used for more accurate BMR calculation)`);
         }
     } catch (error) {
         console.error('Recommendations display error:', error);
@@ -769,22 +753,32 @@ function displayRecommendations() {
 // Export functions
 function copyResultsJSON() {
     try {
+        if (!resultsCalculated) {
+            showToast('Calculate results first');
+            return;
+        }
+        
         const jsonData = JSON.stringify(calculatedResults, null, 2);
         navigator.clipboard.writeText(jsonData).then(() => {
-            showToast('Results copied to clipboard!', 'success');
+            showToast('Results copied to clipboard!');
         }).catch(() => {
-            showToast('Failed to copy to clipboard', 'error');
+            showToast('Failed to copy to clipboard');
         });
     } catch (error) {
         console.error('Copy JSON error:', error);
-        showToast('Copy failed', 'error');
+        showToast('Copy failed');
     }
 }
 
 function downloadResultsPDF() {
     try {
+        if (!resultsCalculated) {
+            showToast('Calculate results first');
+            return;
+        }
+        
         if (typeof window.jsPDF === 'undefined') {
-            showToast('PDF library not loaded', 'error');
+            showToast('PDF library not loaded');
             return;
         }
         
@@ -802,9 +796,9 @@ function downloadResultsPDF() {
         y += 10;
         doc.text(`Gender: ${userData.gender}`, 20, y);
         y += 10;
-        doc.text(`Height: ${userData.height.toFixed(0)}cm`, 20, y);
+        doc.text(`Height: ${userData.heightCm.toFixed(0)}cm`, 20, y);
         y += 10;
-        doc.text(`Weight: ${userData.weight.toFixed(1)}kg`, 20, y);
+        doc.text(`Weight: ${userData.weightKg.toFixed(1)}kg`, 20, y);
         y += 10;
         doc.text(`Goal: ${userData.goal}`, 20, y);
         y += 10;
@@ -839,10 +833,10 @@ function downloadResultsPDF() {
         doc.text(`Fats: ${calculatedResults.macros.fats.grams}g (${calculatedResults.macros.fats.percentage}%)`, 20, y);
         
         doc.save('calorie-calculator-results.pdf');
-        showToast('PDF downloaded successfully!', 'success');
+        showToast('PDF downloaded successfully!');
     } catch (error) {
         console.error('PDF download error:', error);
-        showToast('PDF download failed', 'error');
+        showToast('PDF download failed');
     }
 }
 
@@ -851,9 +845,10 @@ function startOver() {
         currentStep = 0;
         userData = {};
         calculatedResults = {};
+        resultsCalculated = false;
         
         // Reset all form inputs
-        const inputs = qa('input');
+        const inputs = document.querySelectorAll('input');
         inputs.forEach(input => {
             if (input.type === 'radio' || input.type === 'checkbox') {
                 input.checked = false;
@@ -863,7 +858,7 @@ function startOver() {
         });
         
         // Reset unit toggles
-        const unitBtns = qa('.unit-btn');
+        const unitBtns = document.querySelectorAll('.unit-btn');
         unitBtns.forEach(btn => {
             btn.classList.remove('active');
             btn.setAttribute('aria-checked', 'false');
@@ -872,6 +867,8 @@ function startOver() {
         // Activate first unit buttons
         const firstHeightBtn = q('#step-3 .unit-btn[data-unit="cm"]');
         const firstWeightBtn = q('#step-4 .unit-btn[data-unit="kg"]');
+        const firstWaistBtn = q('#step-8 .unit-btn[data-unit="cm"]');
+        
         if (firstHeightBtn) {
             firstHeightBtn.classList.add('active');
             firstHeightBtn.setAttribute('aria-checked', 'true');
@@ -880,18 +877,28 @@ function startOver() {
             firstWeightBtn.classList.add('active');
             firstWeightBtn.setAttribute('aria-checked', 'true');
         }
+        if (firstWaistBtn) {
+            firstWaistBtn.classList.add('active');
+            firstWaistBtn.setAttribute('aria-checked', 'true');
+        }
+        
+        // Disable export buttons
+        const copyBtn = q('#copyResultsBtn');
+        const pdfBtn = q('#downloadPdfBtn');
+        if (copyBtn) copyBtn.disabled = true;
+        if (pdfBtn) pdfBtn.disabled = true;
         
         // Hide all steps and show welcome
-        const steps = qa('.form-step');
+        const steps = document.querySelectorAll('.form-step');
         steps.forEach(step => step.classList.remove('active'));
         
         const welcomeStep = q('#step-0');
         if (welcomeStep) welcomeStep.classList.add('active');
         
         updateProgress();
-        showToast('Calculator reset successfully', 'success');
+        showToast('Calculator reset successfully');
     } catch (error) {
         console.error('Start over error:', error);
-        showToast('Reset failed', 'error');
+        showToast('Reset failed');
     }
 }
