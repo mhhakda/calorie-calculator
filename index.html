@@ -258,9 +258,18 @@
                         <div class="card__body">
                             <h2>Waist Measurement</h2>
                             <p class="step-description">Measure around your waist at the narrowest point, usually just above the hip bones.</p>
-                            <div class="input-group">
-                                <input type="number" id="waist" min="50" max="200" placeholder="Enter waist measurement" class="input input--lg">
-                                <label for="waist" class="input-label">Waist (<span id="waist-unit">cm</span>)</label>
+                            <div class="unit-toggle" role="radiogroup" aria-labelledby="waist-unit-label">
+                                <h3 id="waist-unit-label" class="sr-only">Select waist unit</h3>
+                                <button type="button" class="unit-btn active" data-unit="cm" onclick="toggleWaistUnit(this)" tabindex="0" aria-checked="true" role="radio">cm</button>
+                                <button type="button" class="unit-btn" data-unit="in" onclick="toggleWaistUnit(this)" tabindex="0" aria-checked="false" role="radio">inches</button>
+                            </div>
+                            <div class="input-group" id="waist-cm-group">
+                                <input type="number" id="waist-cm" min="50" max="200" placeholder="Enter waist in cm" class="input input--lg">
+                                <label for="waist-cm" class="input-label">Waist (cm)</label>
+                            </div>
+                            <div class="input-group hidden" id="waist-in-group">
+                                <input type="number" id="waist-in" min="20" max="80" placeholder="Enter waist in inches" class="input input--lg">
+                                <label for="waist-in" class="input-label">Waist (inches)</label>
                             </div>
                             <div class="button-group">
                                 <button class="btn btn--secondary" onclick="prevStep()" aria-label="Go to previous step">Back</button>
@@ -363,8 +372,8 @@
                             
                             <!-- Export Buttons -->
                             <div class="export-buttons">
-                                <button class="btn btn--secondary btn--sm" onclick="copyResultsJSON()" aria-label="Copy results as JSON">📋 Copy Results JSON</button>
-                                <button class="btn btn--secondary btn--sm" onclick="downloadResultsPDF()" aria-label="Download results as PDF">📄 Download PDF</button>
+                                <button class="btn btn--secondary btn--sm" id="copyResultsBtn" onclick="copyResultsJSON()" aria-label="Copy results as JSON" disabled>📋 Copy Results JSON</button>
+                                <button class="btn btn--secondary btn--sm" id="downloadPdfBtn" onclick="downloadResultsPDF()" aria-label="Download results as PDF" disabled>📄 Download PDF</button>
                             </div>
 
                             <div class="results-grid">
@@ -443,6 +452,12 @@
                 </div>
             </div>
         </main>
+
+        <!-- Debug Panel (only visible with ?debug=true) -->
+        <div id="debugPanel" class="debug-panel hidden">
+            <h4>Debug Info</h4>
+            <pre id="debugOutput"></pre>
+        </div>
 
         <!-- Modal -->
         <div id="modal" class="modal hidden" role="dialog" aria-labelledby="modal-title" aria-describedby="modal-message">
