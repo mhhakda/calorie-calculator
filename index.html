@@ -261,7 +261,7 @@
                             <div class="unit-toggle" role="radiogroup" aria-labelledby="waist-unit-label">
                                 <h3 id="waist-unit-label" class="sr-only">Select waist unit</h3>
                                 <button type="button" class="unit-btn active" data-unit="cm" onclick="toggleWaistUnit(this)" tabindex="0" aria-checked="true" role="radio">cm</button>
-                                <button type="button" class="unit-btn" data-unit="in" onclick="toggleWaistUnit(this)" tabindex="0" aria-checked="false" role="radio">inches</button>
+                                <button type="button" class="unit-btn" data-unit="inch" onclick="toggleWaistUnit(this)" tabindex="0" aria-checked="false" role="radio">inches</button>
                             </div>
                             <div class="input-group" id="waist-cm-group">
                                 <input type="number" id="waist-cm" min="50" max="200" placeholder="Enter waist in cm" class="input input--lg">
@@ -358,7 +358,7 @@
                             </div>
                             <div class="button-group">
                                 <button class="btn btn--secondary" onclick="prevStep()" aria-label="Go to previous step">Back</button>
-                                <button class="btn btn--primary" onclick="calculateResults()" aria-label="Calculate your results">Calculate Results</button>
+                                <button class="btn btn--primary" id="calculateBtn" onclick="calculateResults()" aria-label="Calculate your results">Calculate Results</button>
                             </div>
                         </div>
                     </div>
@@ -457,18 +457,6 @@
         <div id="debugPanel" class="debug-panel hidden">
             <h4>Debug Info</h4>
             <pre id="debugOutput"></pre>
-        </div>
-
-        <!-- Modal -->
-        <div id="modal" class="modal hidden" role="dialog" aria-labelledby="modal-title" aria-describedby="modal-message">
-            <div class="modal-content">
-                <h3 id="modal-title">Confirm Input</h3>
-                <p id="modal-message">Please confirm your input.</p>
-                <div class="modal-buttons">
-                    <button class="btn btn--secondary" onclick="closeModal()" aria-label="Edit the input">Edit</button>
-                    <button class="btn btn--primary" onclick="confirmModal()" aria-label="Proceed with the input">Proceed</button>
-                </div>
-            </div>
         </div>
     </div>
 
