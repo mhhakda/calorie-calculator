@@ -615,7 +615,66 @@ function resetCalculator() {
 
 // Download results (placeholder - would need PDF library in real implementation)
 function downloadResults() {
-    alert('PDF download functionality would be implemented with a PDF generation library like jsPDF in a production environment.');
+    if (!window.lastResults) {
+        alert("Please calculate results first.");
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+
+    // Title
+    doc.setFontSize(18);
+    doc.text("Smart Calorie Calculator Results", 20, 20);
+
+    doc.setFontSize(12);
+    doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, 35);
+
+    // Inputs
+    doc.text("Your Inputs:", 20, 55);
+    let y = 70;
+    const inputs = [
+      ["Age", window.lastResults.age],
+      ["Gender", window.lastResults.gender],
+      ["Height", window.lastResults.heightCm + " cm"],
+      ["Weight", window.lastResults.weightKg + " kg"],
+      ["Activity", window.lastResults.activity],
+      ["Goal", window.lastResults.goal],
+      ["Stress", window.lastResults.stress],
+    ];
+    inputs.forEach(([label, value]) => {
+      doc.text(`${label}: ${value ?? "—"}`, 20, y);
+      y += 10;
+    });
+
+    // Results
+    y += 10;
+    doc.text("Results:", 20, y); y += 15;
+    const outputs = [
+      ["BMR", window.lastResults.bmr + " kcal/day"],
+      ["TDEE", window.lastResults.tdee + " kcal/day"],
+      ["Goal Calories", window.lastResults.goalCalories + " kcal/day"],
+      ["BMI", window.lastResults.bmi],
+      ["WHtR", window.lastResults.whtr],
+    ];
+    outputs.forEach(([label, value]) => {
+      doc.text(`${label}: ${value ?? "—"}`, 20, y);
+      y += 10;
+    });
+
+    // Macros
+    y += 10;
+    doc.text("Macronutrient Breakdown:", 20, y); y += 15;
+    doc.text(`Protein: ${window.lastResults.macros.proteinGrams} g (${window.lastResults.macros.proteinPct}%)`, 20, y); y += 10;
+    doc.text(`Carbs: ${window.lastResults.macros.carbsGrams} g (${window.lastResults.macros.carbsPct}%)`, 20, y); y += 10;
+    doc.text(`Fat: ${window.lastResults.macros.fatGrams} g (${window.lastResults.macros.fatPct}%)`, 20, y); y += 10;
+
+    // Footer
+    y += 20;
+    doc.setFontSize(10);
+    doc.text("Disclaimer: This report is for informational purposes only and not medical advice.", 20, y);
+
+    doc.save("calorie-results.pdf");
 }
 
 // Utility functions for better UX
