@@ -720,7 +720,7 @@ function downloadResults() {
         // Links
         y += 15;
         doc.setTextColor(0, 102, 204);
-        doc.textWithLink("👉 Try the Diet Planner", 20, y, { url: "https://thedietplanner.com/diet-planner" });
+        doc.textWithLink("👉 Try the Diet Planner", 20, y, { url: "https://thedietplanner.com/personalized-diet-plans" });
         y += 8;
         doc.textWithLink("👉 Use the Diet Tracker", 20, y, { url: "https://thedietplanner.com/diet-tracker" });
 
