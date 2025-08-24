@@ -652,97 +652,88 @@ function downloadResults() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // Brand styling
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(40, 90, 140); // Accent color like your site
-    doc.text("Smart Calorie Calculator Results", 20, 20);
+    // Add site logo at the top (adjust URL to your logo file)
+    const img = new Image();
+    img.src = "https://thedietplanner.com/logo.png"; // change to your actual logo path
+    img.onload = function () {
+        doc.addImage(img, "PNG", 150, 10, 40, 20);
 
-    // Date
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(0, 0, 0);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, 30);
+        // Title styled like site
+        doc.setFontSize(20);
+        doc.setTextColor(33, 150, 243);
+        doc.text("Smart Calorie Calculator Results", 20, 20);
 
-    // Divider line
-    doc.setDrawColor(200, 200, 200);
-    doc.line(20, 35, 190, 35);
+        doc.setFontSize(11);
+        doc.setTextColor(100, 100, 100);
+        doc.text(`Generated on: ${new Date().toLocaleString()}`, 20, 30);
 
-    let y = 50;
+        // Inputs
+        let y = 45;
+        doc.setFontSize(14);
+        doc.setTextColor(0, 0, 0);
+        doc.text("Your Inputs", 20, y); 
+        y += 10;
 
-    // Inputs Section
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text("Your Inputs", 20, y); 
-    y += 8;
+        const inputs = [
+          ["Age", window.lastResults.age],
+          ["Gender", window.lastResults.gender],
+          ["Height", window.lastResults.heightCm + " cm"],
+          ["Weight", window.lastResults.weightKg + " kg"],
+          ["Activity", window.lastResults.activity],
+          ["Goal", window.lastResults.goal],
+          ["Stress", window.lastResults.stress],
+        ];
+        doc.setFontSize(12);
+        inputs.forEach(([label, value]) => {
+          doc.text(`${label}: ${value ?? "—"}`, 20, y);
+          y += 8;
+        });
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(12);
-    const inputs = [
-      ["Age", window.lastResults.age],
-      ["Gender", window.lastResults.gender],
-      ["Height", window.lastResults.heightCm + " cm"],
-      ["Weight", window.lastResults.weightKg + " kg"],
-      ["Activity", window.lastResults.activity],
-      ["Goal", window.lastResults.goal],
-      ["Stress", window.lastResults.stress],
-    ];
-    inputs.forEach(([label, value]) => {
-      doc.text(`${label}: ${value ?? "—"}`, 30, y);
-      y += 7;
-    });
+        // Results
+        y += 10;
+        doc.setFontSize(14);
+        doc.text("Results", 20, y); 
+        y += 10;
 
-    // Results Section
-    y += 10;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text("Results", 20, y);
-    y += 8;
+        const outputs = [
+          ["BMR", window.lastResults.bmr + " kcal/day"],
+          ["TDEE", window.lastResults.tdee + " kcal/day"],
+          ["Goal Calories", window.lastResults.goalCalories + " kcal/day"],
+          ["BMI", window.lastResults.bmi],
+          ["WHtR", window.lastResults.whtr],
+        ];
+        doc.setFontSize(12);
+        outputs.forEach(([label, value]) => {
+          doc.text(`${label}: ${value ?? "—"}`, 20, y);
+          y += 8;
+        });
 
-    doc.setFont("helvetica", "normal");
-    const outputs = [
-      ["BMR", window.lastResults.bmr + " kcal/day"],
-      ["TDEE", window.lastResults.tdee + " kcal/day"],
-      ["Goal Calories", window.lastResults.goalCalories + " kcal/day"],
-      ["BMI", window.lastResults.bmi],
-      ["WHtR", window.lastResults.whtr],
-    ];
-    outputs.forEach(([label, value]) => {
-      doc.text(`${label}: ${value ?? "—"}`, 30, y);
-      y += 7;
-    });
+        // Macros
+        y += 10;
+        doc.setFontSize(14);
+        doc.text("Macronutrient Breakdown", 20, y); 
+        y += 10;
+        doc.setFontSize(12);
+        doc.text(`Protein: ${window.lastResults.macros.proteinGrams} g (${window.lastResults.macros.proteinPct}%)`, 20, y); y += 8;
+        doc.text(`Carbs: ${window.lastResults.macros.carbsGrams} g (${window.lastResults.macros.carbsPct}%)`, 20, y); y += 8;
+        doc.text(`Fat: ${window.lastResults.macros.fatGrams} g (${window.lastResults.macros.fatPct}%)`, 20, y); y += 8;
 
-    // Macros
-    y += 10;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text("Macronutrient Breakdown", 20, y);
-    y += 8;
+        // Links
+        y += 15;
+        doc.setTextColor(0, 102, 204);
+        doc.textWithLink("👉 Try the Diet Planner", 20, y, { url: "https://thedietplanner.com/diet-planner" });
+        y += 8;
+        doc.textWithLink("👉 Use the Diet Tracker", 20, y, { url: "https://thedietplanner.com/diet-tracker" });
 
-    doc.setFont("helvetica", "normal");
-    doc.text(`Protein: ${window.lastResults.macros.proteinGrams} g (${window.lastResults.macros.proteinPct}%)`, 30, y); y += 7;
-    doc.text(`Carbs: ${window.lastResults.macros.carbsGrams} g (${window.lastResults.macros.carbsPct}%)`, 30, y); y += 7;
-    doc.text(`Fat: ${window.lastResults.macros.fatGrams} g (${window.lastResults.macros.fatPct}%)`, 30, y); y += 7;
+        // Footer
+        y += 20;
+        doc.setFontSize(10);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Disclaimer: This report is for informational purposes only and not medical advice.", 20, y);
 
-    // Links Section
-    y += 15;
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.setTextColor(40, 90, 140);
-    doc.textWithLink("👉 Try Our Diet Planner", 20, y, { url: "https://thedietplanner.com/personalized-diet-plans" });
-    y += 8;
-    doc.textWithLink("👉 Use Diet Tracker", 20, y, { url: "https://thedietplanner.com/diet-tracker
-" });
-
-    // Disclaimer
-    y += 20;
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text("Disclaimer: This report is for informational purposes only and not medical advice.", 20, y);
-
-    // Save PDF
-    doc.save("calorie-results.pdf");
+        // Save PDF
+        doc.save("calorie-results.pdf");
+    };
 }
 
 
