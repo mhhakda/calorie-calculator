@@ -579,6 +579,33 @@ function displayResults(results) {
     
     // Scroll to results
     document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+
+    // ✅ Save results globally for PDF
+    window.lastResults = {
+        age: userData.age,
+        gender: userData.gender,
+        heightCm: userData.heightCm,
+        weightKg: userData.weightKg,
+        activity: userData.activity,
+        goal: userData.goal,
+        stress: userData.stress,
+        bmr: results.bmr ? Math.round(results.bmr) : "—",
+        tdee: results.maintenanceCalories,
+        goalCalories: results.goalCalories,
+        bmi: results.bmi.value,
+        whtr: results.whr.value,
+        macros: {
+            proteinGrams: results.macros.protein.grams,
+            proteinPct: results.macros.protein.percent,
+            carbsGrams: results.macros.carbs.grams,
+            carbsPct: results.macros.carbs.percent,
+            fatGrams: results.macros.fat.grams,
+            fatPct: results.macros.fat.percent
+        }
+    };
+
+    // ✅ Enable PDF button
+    document.getElementById("downloadResultsPdf").disabled = false;
 }
 
 // Reset calculator
@@ -611,9 +638,12 @@ function resetCalculator() {
     
     // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    // ✅ Reset PDF button
+    document.getElementById("downloadResultsPdf").disabled = true;
 }
 
-// Download results (placeholder - would need PDF library in real implementation)
+// Download results as PDF
 function downloadResults() {
     if (!window.lastResults) {
         alert("Please calculate results first.");
@@ -688,3 +718,6 @@ document.addEventListener('keydown', function(e) {
         }
     }
 });
+
+// ✅ Attach click handler once
+document.getElementById("downloadResultsPdf").addEventListener("click", downloadResults);
