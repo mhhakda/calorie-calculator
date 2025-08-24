@@ -14,7 +14,7 @@ let userData = {};
 let calculatedResults = {};
 let resultsCalculated = false;
 
-// Activity multipliers
+// Activity multipliers for TDEE calculation
 const ACTIVITY_MULTIPLIERS = {
     sedentary: 1.2,
     light: 1.375,
@@ -30,17 +30,12 @@ const BMI_THRESHOLDS = {
     overweight: 29.9
 };
 
-// Debug mode
+// Debug mode check
 const DEBUG_MODE = new URLSearchParams(window.location.search).get('debug') === 'true';
 
 // DOM helper functions
 function q(selector) { 
     return document.querySelector(selector) || null; 
-}
-
-function setText(selector, value) {
-    const el = q(selector);
-    if (el) el.textContent = value;
 }
 
 function parseNumber(selector) {
@@ -50,30 +45,36 @@ function parseNumber(selector) {
     return isNaN(num) ? null : num;
 }
 
+function setText(selector, value) {
+    const el = q(selector);
+    if (el) el.textContent = value;
+}
+
 // Toast notification system
-function showToast(msg, ms = 4000) {
+function showToast(message, type = 'info') {
     try {
         const container = q('#toastContainer');
         if (!container) return;
         
         const toast = document.createElement('div');
-        toast.className = 'toast toast--info';
-        toast.textContent = msg;
+        toast.className = `toast toast--${type}`;
+        toast.textContent = message;
         
         container.appendChild(toast);
         
+        // Auto-remove after 4 seconds
         setTimeout(() => {
             if (toast.parentNode) {
                 toast.classList.add('toast--fade');
                 setTimeout(() => toast.remove(), 300);
             }
-        }, ms);
+        }, 4000);
     } catch (error) {
         console.error('Toast error:', error);
     }
 }
 
-// Debug logging
+// Debug logging function
 function debugLog(message, data = null) {
     if (DEBUG_MODE) {
         console.log(`[DEBUG] ${message}`, data);
@@ -137,11 +138,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     } catch (error) {
         console.error('Initialization error:', error);
-        showToast('App initialization failed');
+        showToast('App initialization failed', 'error');
     }
 });
 
-// Progress bar functionality - FIXED
+// Progress bar functionality
 function updateProgress() {
     try {
         const totalSteps = Number(window.totalSteps || 11);
@@ -172,7 +173,7 @@ function nextStep() {
         }
     } catch (error) {
         console.error('Next step error:', error);
-        showToast('Navigation error occurred');
+        showToast('Navigation error occurred', 'error');
     }
 }
 
@@ -186,7 +187,7 @@ function prevStep() {
         }
     } catch (error) {
         console.error('Previous step error:', error);
-        showToast('Navigation error occurred');
+        showToast('Navigation error occurred', 'error');
     }
 }
 
@@ -225,7 +226,7 @@ function validateCurrentStep() {
         }
     } catch (error) {
         console.error('Validation error:', error);
-        showToast('Validation error occurred');
+        showToast('Validation error occurred', 'error');
         return false;
     }
 }
@@ -233,7 +234,7 @@ function validateCurrentStep() {
 function validateAge() {
     const age = parseNumber('#age');
     if (!age || age < 1 || age > 120) {
-        showToast('Please enter a valid age (1-120 years)');
+        showToast('Please enter a valid age (1-120 years)', 'error');
         return false;
     }
     userData.age = age;
@@ -243,7 +244,7 @@ function validateAge() {
 function validateGender() {
     const genderEl = q('input[name="gender"]:checked');
     if (!genderEl) {
-        showToast('Please select your gender');
+        showToast('Please select your gender', 'error');
         return false;
     }
     userData.gender = genderEl.value;
@@ -253,7 +254,7 @@ function validateGender() {
 function validateHeight() {
     const heightCm = getHeightCm();
     if (!heightCm || heightCm < 100 || heightCm > 250) {
-        showToast('Please enter a valid height');
+        showToast('Please enter a valid height', 'error');
         return false;
     }
     userData.heightCm = heightCm;
@@ -263,7 +264,7 @@ function validateHeight() {
 function validateWeight() {
     const weightKg = getWeightKg();
     if (!weightKg || weightKg < 20 || weightKg > 300) {
-        showToast('Please enter a valid weight');
+        showToast('Please enter a valid weight', 'error');
         return false;
     }
     userData.weightKg = weightKg;
@@ -273,7 +274,7 @@ function validateWeight() {
 function validateGoal() {
     const goalEl = q('input[name="goal"]:checked');
     if (!goalEl) {
-        showToast('Please select your goal');
+        showToast('Please select your goal', 'error');
         return false;
     }
     userData.goal = goalEl.value;
@@ -283,7 +284,7 @@ function validateGoal() {
 function validateActivity() {
     const activityEl = q('input[name="activity"]:checked');
     if (!activityEl) {
-        showToast('Please select your activity level');
+        showToast('Please select your activity level', 'error');
         return false;
     }
     userData.activity = activityEl.value;
@@ -294,7 +295,7 @@ function validateBodyFat() {
     const bodyFat = parseNumber('#bodyFat');
     if (bodyFat !== null) {
         if (bodyFat < 5 || bodyFat > 50) {
-            showToast('Body fat percentage should be between 5% and 50%');
+            showToast('Body fat percentage should be between 5% and 50%', 'error');
             return false;
         }
         userData.bodyFat = bodyFat;
@@ -305,7 +306,7 @@ function validateBodyFat() {
 function validateWaist() {
     const waistCm = getWaistCm();
     if (!waistCm || waistCm < 40 || waistCm > 200) {
-        showToast('Please enter a valid waist measurement');
+        showToast('Please enter a valid waist measurement', 'error');
         return false;
     }
     userData.waistCm = waistCm;
@@ -315,7 +316,7 @@ function validateWaist() {
 function validateWork() {
     const workEl = q('input[name="work"]:checked');
     if (!workEl) {
-        showToast('Please select your work type');
+        showToast('Please select your work type', 'error');
         return false;
     }
     userData.work = workEl.value;
@@ -325,7 +326,7 @@ function validateWork() {
 function validateSleep() {
     const sleep = parseNumber('#sleep');
     if (!sleep || sleep < 3 || sleep > 15) {
-        showToast('Please enter sleep hours between 3 and 15');
+        showToast('Please enter sleep hours between 3 and 15', 'error');
         return false;
     }
     userData.sleep = sleep;
@@ -335,7 +336,7 @@ function validateSleep() {
 function validateStress() {
     const stressEl = q('input[name="stress"]:checked');
     if (!stressEl) {
-        showToast('Please select your stress level');
+        showToast('Please select your stress level', 'error');
         return false;
     }
     userData.stress = stressEl.value;
@@ -454,6 +455,17 @@ function toggleWaistUnit(clickedBtn) {
 
 function setupKeyboardNavigation() {
     try {
+        // Add keyboard support for unit toggles
+        const unitButtons = document.querySelectorAll('.unit-btn');
+        unitButtons.forEach(btn => {
+            btn.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    btn.click();
+                }
+            });
+        });
+        
         // Add keyboard support for radio groups
         const radioGroups = document.querySelectorAll('[role="radiogroup"]');
         radioGroups.forEach(group => {
@@ -484,20 +496,33 @@ function skipBodyFat() {
     nextStep();
 }
 
-// Main calculation function - FIXED
+// Main calculation function - FIXED to ensure it runs
 function calculateResults() {
     try {
         debugLog('Starting calculation with userData', userData);
         
-        // Validate all required data
+        // Validate all required data first
         if (!userData.age || !userData.gender || !userData.heightCm || !userData.weightKg || 
             !userData.goal || !userData.activity || !userData.waistCm || !userData.work || 
             !userData.sleep || !userData.stress) {
-            showToast('Please complete all required fields');
+            
+            const missingFields = [];
+            if (!userData.age) missingFields.push('Age (Step 1)');
+            if (!userData.gender) missingFields.push('Gender (Step 2)');
+            if (!userData.heightCm) missingFields.push('Height (Step 3)');
+            if (!userData.weightKg) missingFields.push('Weight (Step 4)');
+            if (!userData.goal) missingFields.push('Goal (Step 5)');
+            if (!userData.activity) missingFields.push('Activity (Step 6)');
+            if (!userData.waistCm) missingFields.push('Waist (Step 8)');
+            if (!userData.work) missingFields.push('Work Type (Step 9)');
+            if (!userData.sleep) missingFields.push('Sleep (Step 10)');
+            if (!userData.stress) missingFields.push('Stress (Step 11)');
+            
+            showToast(`Please complete: ${missingFields.join(', ')}`, 'error');
             return false;
         }
         
-        // Calculate BMR
+        // Calculate BMR using appropriate formula
         const bmr = calculateBMR();
         debugLog('BMR calculated', bmr);
         
@@ -513,7 +538,7 @@ function calculateResults() {
         // Calculate goal calories with safety floor
         let goalCalories = calculateGoalCalories(tdee);
         if (goalCalories < 1000) {
-            showToast('Warning: Very low calorie target. Please consult a healthcare professional.');
+            showToast('Warning: Very low calorie target detected. Using 1000 kcal minimum.', 'warning');
             goalCalories = Math.max(goalCalories, 1000);
         }
         
@@ -525,8 +550,12 @@ function calculateResults() {
         const waistToHeight = calculateWaistToHeight();
         debugLog('Waist-to-height ratio', waistToHeight);
         
-        // Calculate macros
-        const macros = calculateMacros(goalCalories);
+        // Calculate macros only if calories > 0
+        const macros = goalCalories > 0 ? calculateMacros(goalCalories) : {
+            protein: { grams: 0, calories: 0, percentage: 0 },
+            carbs: { grams: 0, calories: 0, percentage: 0 },
+            fats: { grams: 0, calories: 0, percentage: 0 }
+        };
         debugLog('Macros calculated', macros);
         
         // Store results
@@ -556,11 +585,12 @@ function calculateResults() {
         hideStep(currentStep);
         showStep('results');
         
-        showToast('Calculation completed successfully!');
+        showToast('Calculation completed successfully!', 'success');
+        return true;
         
     } catch (error) {
         console.error('Calculation error:', error);
-        showToast('Calculation failed - check console');
+        showToast('Calculation failed — check console', 'error');
         return false;
     }
 }
@@ -574,7 +604,7 @@ function calculateBMR() {
         return 370 + (21.6 * leanMass);
     }
     
-    // Use Mifflin-St Jeor formula
+    // Use Mifflin-St Jeor formula by default
     let bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * age);
     
     if (gender === 'male') {
@@ -641,7 +671,7 @@ function calculateMacros(goalCalories) {
     const carbsCalories = Math.max(0, goalCalories - proteinCalories - fatCalories);
     const carbsGrams = Math.round(carbsCalories / 4);
     
-    // Calculate percentages safely
+    // Calculate percentages with division-by-zero guard
     const totalCalories = proteinCalories + fatCalories + carbsCalories;
     const proteinPct = totalCalories > 0 ? Math.round((proteinCalories / totalCalories) * 100) : 0;
     const fatPct = totalCalories > 0 ? Math.round((fatCalories / totalCalories) * 100) : 0;
@@ -693,7 +723,7 @@ function displayResults() {
         
     } catch (error) {
         console.error('Display results error:', error);
-        showToast('Error displaying results');
+        showToast('Error displaying results', 'error');
     }
 }
 
@@ -744,6 +774,8 @@ function displayRecommendations() {
         // Body fat display
         if (bodyFat) {
             setText('#bodyFatDisplay', `Body Fat: ${bodyFat}% (used for more accurate BMR calculation)`);
+        } else {
+            setText('#bodyFatDisplay', '');
         }
     } catch (error) {
         console.error('Recommendations display error:', error);
@@ -754,31 +786,31 @@ function displayRecommendations() {
 function copyResultsJSON() {
     try {
         if (!resultsCalculated) {
-            showToast('Calculate results first');
+            showToast('Calculate results first', 'warning');
             return;
         }
         
         const jsonData = JSON.stringify(calculatedResults, null, 2);
         navigator.clipboard.writeText(jsonData).then(() => {
-            showToast('Results copied to clipboard!');
+            showToast('Results copied to clipboard!', 'success');
         }).catch(() => {
-            showToast('Failed to copy to clipboard');
+            showToast('Failed to copy to clipboard', 'error');
         });
     } catch (error) {
         console.error('Copy JSON error:', error);
-        showToast('Copy failed');
+        showToast('Copy failed', 'error');
     }
 }
 
 function downloadResultsPDF() {
     try {
         if (!resultsCalculated) {
-            showToast('Calculate results first');
+            showToast('Calculate results first', 'warning');
             return;
         }
         
         if (typeof window.jsPDF === 'undefined') {
-            showToast('PDF library not loaded');
+            showToast('PDF library not loaded', 'error');
             return;
         }
         
@@ -833,10 +865,10 @@ function downloadResultsPDF() {
         doc.text(`Fats: ${calculatedResults.macros.fats.grams}g (${calculatedResults.macros.fats.percentage}%)`, 20, y);
         
         doc.save('calorie-calculator-results.pdf');
-        showToast('PDF downloaded successfully!');
+        showToast('PDF downloaded successfully!', 'success');
     } catch (error) {
         console.error('PDF download error:', error);
-        showToast('PDF download failed');
+        showToast('PDF download failed', 'error');
     }
 }
 
@@ -896,9 +928,9 @@ function startOver() {
         if (welcomeStep) welcomeStep.classList.add('active');
         
         updateProgress();
-        showToast('Calculator reset successfully');
+        showToast('Calculator reset successfully', 'success');
     } catch (error) {
         console.error('Start over error:', error);
-        showToast('Reset failed');
+        showToast('Reset failed', 'error');
     }
 }
