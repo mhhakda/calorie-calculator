@@ -34,8 +34,8 @@ const BMI_THRESHOLDS = {
 const DEBUG_MODE = new URLSearchParams(window.location.search).get('debug') === 'true';
 
 // DOM helper functions
-function q(selector) { 
-    return document.querySelector(selector) || null; 
+function q(selector) {
+    return document.querySelector(selector) || null;
 }
 
 function parseNumber(selector) {
